@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/authStore';
 import { getPayslips, getMyPayslips, downloadPayslip } from '../api/payslips';
+import Toast from '../components/ui/Toast';
 import { FileDown, FileText, Calendar } from 'lucide-react';
 import { Payslip } from '../types';
 
@@ -10,6 +12,7 @@ const MONTHS = ['January','February','March','April','May','June',
 export default function Payslips() {
   const { user, isRole } = useAuthStore();
   const isEmployee = isRole('EMPLOYEE');
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
 
   const { data: payslips = [], isLoading } = useQuery({
     queryKey: isEmployee ? ['my-payslips', user?.employeeId] : ['payslips'],
@@ -29,7 +32,8 @@ export default function Payslips() {
       window.URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Payslip download failed', error);
-      alert('Unable to download payslip. Please try again.');
+      setToast({ type: 'error', msg: 'Unable to download payslip. Please try again.' });
+      setTimeout(() => setToast(null), 4000);
     }
   };
 
@@ -44,6 +48,7 @@ export default function Payslips() {
 
   return (
     <div>
+      {toast && <Toast type={toast.type} message={toast.msg} onClose={() => setToast(null)} />}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">
           {isEmployee ? 'My Payslips' : 'All Payslips'}

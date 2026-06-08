@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { getEmployees, setAutoPayLimit, deactivateEmployee } from '../api/employees';
 import { useAuthStore } from '../store/authStore';
 import Badge from '../components/ui/Badge';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { Plus, Search, IndianRupee, Trash2, Eye } from 'lucide-react';
 import { Employee } from '../types';
 
@@ -16,6 +17,7 @@ export default function Employees() {
   const [newLimit, setNewLimit] = useState('');
 
   const { data: employees = [], isLoading } = useQuery({ queryKey: ['employees'], queryFn: getEmployees });
+  const [deactivateCandidate, setDeactivateCandidate] = useState<Employee | null>(null);
 
   const limitMutation = useMutation({
     mutationFn: ({ id, limit }: { id: string; limit: number }) => setAutoPayLimit(id, limit),
@@ -84,7 +86,7 @@ export default function Employees() {
                           <button onClick={() => { setLimitModal({ emp }); setNewLimit(String(emp.autoPayLimit)); }} title="Set limit" className="p-1.5 rounded text-indigo-500 hover:bg-indigo-50"><IndianRupee className="w-4 h-4" /></button>
                         )}
                         {isRole('SUPER_ADMIN', 'HR_MANAGER') && emp.isActive && (
-                          <button onClick={() => { if (confirm('Deactivate this employee?')) deactivateMutation.mutate(emp.id); }} title="Deactivate" className="p-1.5 rounded text-red-400 hover:bg-red-50"><Trash2 className="w-4 h-4" /></button>
+                          <button onClick={() => setDeactivateCandidate(emp)} title="Deactivate" className="p-1.5 rounded text-red-400 hover:bg-red-50"><Trash2 className="w-4 h-4" /></button>
                         )}
                       </div>
                     </td>
@@ -112,6 +114,21 @@ export default function Employees() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deactivateCandidate}
+        title="Deactivate employee"
+        description={deactivateCandidate ? `Deactivate ${deactivateCandidate.firstName} ${deactivateCandidate.lastName}? This will prevent them from appearing in payroll and employee flows.` : ''}
+        confirmText="Deactivate"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (deactivateCandidate) {
+            deactivateMutation.mutate(deactivateCandidate.id);
+            setDeactivateCandidate(null);
+          }
+        }}
+        onCancel={() => setDeactivateCandidate(null)}
+      />
     </div>
   );
 }

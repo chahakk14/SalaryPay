@@ -7,6 +7,8 @@ import {
 import { generatePayslips } from '../api/payslips';
 import { useAuthStore } from '../store/authStore';
 import Badge from '../components/ui/Badge';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
+import Toast from '../components/ui/Toast';
 import {
   Plus, Play, CheckCheck, FileText, CreditCard,
   Info, Loader2, X, AlertCircle, CheckCircle, RefreshCw
@@ -167,6 +169,8 @@ export default function Payroll() {
   const qc = useQueryClient();
   const [createModal, setCreateModal] = useState(false);
   const [showTestCards, setShowTestCards] = useState(false);
+  const [confirmExecuteRun, setConfirmExecuteRun] = useState<SalaryRun | null>(null);
+  const [toast, setToast] = useState<{ type: 'success' | 'error' | 'info'; msg: string } | null>(null);
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
@@ -192,10 +196,12 @@ export default function Payroll() {
     mutationFn: retryPendingPayments,
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['salary-runs'] });
-      window.alert(`Retry queued for ${data?.retried ?? '0'} pending payment(s)`);
+      setToast({ type: 'success', msg: `Retry queued for ${data?.retried ?? '0'} pending payment(s)` });
+      setTimeout(() => setToast(null), 4000);
     },
     onError: (err: any) => {
-      window.alert(err?.response?.data?.message || err?.message || 'Retry failed');
+      setToast({ type: 'error', msg: err?.response?.data?.message || err?.message || 'Retry failed' });
+      setTimeout(() => setToast(null), 4000);
     },
   });
   const genPayslipsMutation = useMutation({ mutationFn: generatePayslips });
@@ -306,10 +312,7 @@ export default function Payroll() {
                       {/* Step 3: Execute salary disbursement */}
                       {run.status === 'APPROVED' && isRole('SUPER_ADMIN') && (
                         <button
-                          onClick={() => {
-                            if (confirm(`Execute payroll for ${MONTHS[run.month - 1]} ${run.year}?\n\nThis will disburse ₹${Number(run.totalAmount).toLocaleString()} to all employees.`))
-                              executeMutation.mutate(run.id);
-                          }}
+                          onClick={() => setConfirmExecuteRun(run)}
                           className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-xs hover:bg-indigo-100"
                         >
                           <Play className="w-3 h-3" /> Execute
@@ -395,6 +398,29 @@ export default function Payroll() {
       )}
 
       {showTestCards && <TestCardsModal onClose={() => setShowTestCards(false)} />}
+
+      {toast && (
+        <Toast type={toast.type} message={toast.msg} onClose={() => setToast(null)} />
+      )}
+
+      <ConfirmDialog
+        open={!!confirmExecuteRun}
+        title="Execute Payroll"
+        description={
+          confirmExecuteRun
+            ? `Execute payroll for ${MONTHS[confirmExecuteRun.month - 1]} ${confirmExecuteRun.year}?\n\nThis will disburse ₹${Number(confirmExecuteRun.totalAmount).toLocaleString()} to all employees.`
+            : ''
+        }
+        confirmText="Execute payroll"
+        cancelText="Cancel"
+        onConfirm={() => {
+          if (confirmExecuteRun) {
+            executeMutation.mutate(confirmExecuteRun.id);
+            setConfirmExecuteRun(null);
+          }
+        }}
+        onCancel={() => setConfirmExecuteRun(null)}
+      />
     </div>
   );
 }

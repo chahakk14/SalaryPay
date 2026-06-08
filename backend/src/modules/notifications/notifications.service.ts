@@ -4,6 +4,10 @@ import * as nodemailer from 'nodemailer';
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
+  private readonly mailFrom = {
+    name: 'SalaryPay',
+    address: process.env.SMTP_FROM || 'noreply@salarypay.com',
+  };
   private transporter: nodemailer.Transporter;
 
   constructor() {
@@ -30,19 +34,38 @@ export class NotificationsService {
       .catch((err) => this.logger.error('SMTP connection failed', err));
   }
 
+  private getMonthName(month: number | string): string {
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+
+    if (typeof month === 'number') {
+      return monthNames[month - 1] ?? String(month);
+    }
+
+    const parsedMonth = Number(month);
+    if (!Number.isNaN(parsedMonth)) {
+      return monthNames[parsedMonth - 1] ?? month;
+    }
+
+    return month;
+  }
+
   async sendSalaryCreditEmail(to: string, data: {
     firstName: string; month: number | string; year: number;
     netSalary: number; grossSalary: number; deductions: number;
   }) {
+    const monthName = this.getMonthName(data.month);
     const html = `
       <div style="font-family:sans-serif;max-width:500px;margin:auto;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
         <div style="background:#4f46e5;padding:24px;text-align:center">
-          <h1 style="color:#fff;margin:0;font-size:20px">₹ SalaryPay</h1>
+          <h1 style="color:#fff;margin:0;font-size:20px">SalaryPay</h1>
           <p style="color:#c7d2fe;margin:4px 0 0">Salary Credit Notification</p>
         </div>
         <div style="padding:24px">
           <p style="color:#374151">Hi <strong>${data.firstName}</strong>,</p>
-          <p style="color:#374151">Your salary for <strong>${data.month} ${data.year}</strong> has been credited.</p>
+          <p style="color:#374151">Your salary for <strong>${monthName} ${data.year}</strong> has been credited.</p>
           <div style="background:#f9fafb;border-radius:8px;padding:16px;margin:16px 0">
             <table style="width:100%;font-size:14px">
               <tr><td style="color:#6b7280;padding:4px 0">Gross Salary</td><td style="text-align:right;font-weight:600">₹${Number(data.grossSalary).toLocaleString()}</td></tr>
@@ -62,24 +85,28 @@ export class NotificationsService {
     `;
     try {
       await this.transporter.sendMail({
-        from: `"SalaryPay" <${process.env.SMTP_FROM || 'noreply@salarypay.com'}>`,
-        to, subject: `Salary Credited — ${data.month} ${data.year}`, html,
+        from: this.mailFrom,
+        to,
+        subject: `Salary Credited — ${monthName} ${data.year}`,
+        html,
       });
       this.logger.log(`Salary credit email sent to ${to}`);
     } catch (err) {
-      this.logger.error(`Failed to send email to ${to}: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Failed to send email to ${to}: ${message}`);
     }
   }
 
   async sendPaymentFailureAlert(to: string, data: { firstName: string; reason: string; month: number | string; year: number }) {
+    const monthName = this.getMonthName(data.month);
     try {
       await this.transporter.sendMail({
-        from: `"SalaryPay" <${process.env.SMTP_FROM || 'noreply@salarypay.com'}>`,
+        from: this.mailFrom,
         to,
-        subject: `Salary Payment Failed — ${data.month} ${data.year}`,
-        html: `<p>Hi ${data.firstName}, your salary payment for ${data.month} ${data.year} failed.<br>Reason: ${data.reason}<br>Our team will retry shortly.</p>`,
+        subject: `Salary Payment Failed — ${monthName} ${data.year}`,
+        html: `<p>Hi ${data.firstName}, your salary payment for ${monthName} ${data.year} failed.<br>Reason: ${data.reason}<br>Our team will retry shortly.</p>`,
       });
-    } catch (err) {
+    } catch (err: any) {
       this.logger.error(`Failed to send failure alert to ${to}: ${err.message}`);
     }
   }
@@ -103,7 +130,7 @@ export class NotificationsService {
 
     try {
       await this.transporter.sendMail({
-        from: `"SalaryPay" <${process.env.SMTP_FROM || 'noreply@salarypay.com'}>`,
+        from: this.mailFrom,
         to,
         subject: `Password Reset OTP`,
         html,
