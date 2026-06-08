@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { login } from '../api/auth';
+import { requestPasswordReset, resetPassword } from '../api/auth';
 import { IndianRupee, Loader2, CreditCard } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
@@ -30,6 +31,39 @@ export default function Login() {
       setError('Invalid email or password. Try a demo account below.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Forgot password flow
+  const [showForgot, setShowForgot] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const sendOtp = async () => {
+    try {
+      await requestPasswordReset(forgotEmail || email);
+      setOtpSent(true);
+      alert('OTP sent if the email exists. Check your inbox.');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Could not send OTP');
+    }
+  };
+
+  const submitReset = async () => {
+    setResetLoading(true);
+    try {
+      await resetPassword(forgotEmail || email, otp, newPass);
+      alert('Password reset successful. You can now sign in.');
+      setShowForgot(false);
+      setOtpSent(false);
+      setOtp(''); setNewPass('');
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Reset failed');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -84,6 +118,10 @@ export default function Login() {
             </button>
           </form>
 
+          <div className="mt-3 text-right">
+            <button onClick={() => setShowForgot(true)} className="text-xs text-indigo-600 hover:underline">Forgot password?</button>
+          </div>
+
           {/* Demo accounts */}
           <div className="mt-6 pt-5 border-t border-gray-100">
             <p className="text-xs text-gray-500 mb-3 font-medium text-center">Quick login — demo accounts</p>
@@ -100,6 +138,31 @@ export default function Login() {
             </div>
           </div>
         </div>
+
+        {/* Forgot password modal */}
+        {showForgot && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowForgot(false)}>
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+              <h2 className="font-semibold text-gray-900 mb-3">Reset Password</h2>
+              <p className="text-sm text-gray-500 mb-4">Enter your email to receive an OTP, then set a new password.</p>
+              <div className="space-y-3">
+                <input value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="you@company.com" className="w-full px-3 py-2 border rounded" />
+                {!otpSent ? (
+                  <button onClick={sendOtp} className="w-full bg-indigo-600 text-white py-2 rounded">Send OTP</button>
+                ) : (
+                  <>
+                    <input value={otp} onChange={e => setOtp(e.target.value)} placeholder="Enter OTP" className="w-full px-3 py-2 border rounded" />
+                    <input value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="New password" type="password" className="w-full px-3 py-2 border rounded" />
+                    <div className="flex gap-2">
+                      <button onClick={submitReset} disabled={resetLoading} className="flex-1 bg-green-600 text-white py-2 rounded">{resetLoading ? 'Saving…' : 'Reset Password'}</button>
+                      <button onClick={() => { setOtpSent(false); setOtp(''); }} className="flex-1 border py-2 rounded">Back</button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         <p className="text-center text-xs text-gray-400 mt-5">
           New organization?{' '}

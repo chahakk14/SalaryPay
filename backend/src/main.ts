@@ -19,7 +19,26 @@ async function bootstrap() {
     .build();
   SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, config));
 
-  await app.listen(process.env.PORT || 3000);
-  console.log(`Server running on http://localhost:${process.env.PORT || 3000}`);
+  const defaultPort = 3000;
+  const requestedPort = process.env.PORT ? parseInt(process.env.PORT, 10) : defaultPort;
+  const initialPort = Number.isInteger(requestedPort) && requestedPort > 0 ? requestedPort : defaultPort;
+  const portsToTry = [initialPort, defaultPort, 0].filter((p, index, self) => self.indexOf(p) === index && p >= 0);
+
+  for (const portToTry of portsToTry) {
+    try {
+      await app.listen(portToTry);
+      const url = await app.getUrl();
+      console.log(`Server running on ${url}`);
+      return;
+    } catch (err: any) {
+      if (err?.code === 'EADDRINUSE') {
+        console.warn(`Port ${portToTry} is already in use.`);
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('Could not bind to any available port.');
 }
 bootstrap();

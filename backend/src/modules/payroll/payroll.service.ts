@@ -45,6 +45,40 @@ export class PayrollService {
     return this.prisma.salaryRun.findUnique({ where: { id: salaryRun.id }, include: { payments: true } });
   }
 
+  async retryPendingPayments(runId: string) {
+    const payments = await this.prisma.salaryPayment.findMany({
+      where: {
+        salaryRunId: runId,
+        status: { in: ['PENDING', 'PROCESSING', 'RETRYING'] },
+      },
+      include: { employee: true },
+    });
+
+    if (payments.length === 0) {
+      throw new BadRequestException('No pending or retrying payments found for this salary run');
+    }
+
+    const queuedPayments: string[] = [];
+    for (const payment of payments) {
+      await this.prisma.salaryPayment.update({
+        where: { id: payment.id },
+        data: { status: 'PENDING', failureReason: null },
+      });
+
+      await this.payrollQueue.add('process-payment', { paymentId: payment.id, runId }, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+        removeOnComplete: true,
+        removeOnFail: { count: 10 },
+      });
+
+      queuedPayments.push(payment.id);
+    }
+
+    await this.markRunCompletedIfFinished(runId);
+    return { retried: queuedPayments.length, paymentIds: queuedPayments };
+  }
+
   async approveSalaryRun(runId: string, userId: string) {
     return this.prisma.salaryRun.update({
       where: { id: runId },

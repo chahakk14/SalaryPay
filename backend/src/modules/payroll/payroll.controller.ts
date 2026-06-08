@@ -48,6 +48,11 @@ export class PayrollController {
   @Post('runs/:id/execute')
   execute(@Param('id') id: string) { return this.svc.executeSalaryRun(id); }
 
+  @UseGuards(RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.FINANCE_TEAM)
+  @Post('runs/:id/retry-pending')
+  retryPending(@Param('id') id: string) { return this.svc.retryPendingPayments(id); }
+
   // ── Razorpay: create payment order for payroll funding ──
   @UseGuards(RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.FINANCE_TEAM)

@@ -3,6 +3,7 @@ import { Job } from 'bull';
 import { Logger } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RazorpayService } from './razorpay.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Processor('payroll')
 export class PayrollProcessor {
@@ -11,6 +12,7 @@ export class PayrollProcessor {
   constructor(
     private prisma: PrismaService,
     private razorpay: RazorpayService,
+    private notifications: NotificationsService,
   ) {}
 
   @Process({ name: 'process-payment', concurrency: 5 })
@@ -19,22 +21,26 @@ export class PayrollProcessor {
     this.logger.log(`Processing payment job: ${paymentId} (attempt ${job.attemptsMade + 1})`);
 
     try {
-      await this.prisma.salaryPayment.update({
-        where: { id: paymentId },
-        data: { status: 'PROCESSING' },
-      });
-
       const payment = await this.prisma.salaryPayment.findUnique({
         where: { id: paymentId },
-        include: { employee: true },
+        include: {
+          employee: { include: { user: true } },
+          salaryRun: true,
+        },
       });
 
       if (!payment) {
-        throw new Error(`Salary payment ${paymentId} not found`);
+        this.logger.warn(`Payment ${paymentId} not found. Skipping job.`);
+        return;
       }
       if (!payment.employee) {
         throw new Error(`Employee data missing for payment ${paymentId}`);
       }
+
+      await this.prisma.salaryPayment.update({
+        where: { id: paymentId },
+        data: { status: 'PROCESSING' },
+      });
 
       // ── RazorpayX payout (demo simulation for academic project) ──
       // In production, replace simulateSalaryCredit() with real RazorpayX payout:
@@ -60,6 +66,19 @@ export class PayrollProcessor {
         },
       });
 
+      if (payment.employee.user?.email) {
+        await this.notifications.sendSalaryCreditEmail(payment.employee.user.email, {
+          firstName: payment.employee.firstName,
+          month: payment.salaryRun.month,
+          year: payment.salaryRun.year,
+          netSalary: Number(payment.netSalary),
+          grossSalary: Number(payment.grossSalary),
+          deductions: Number(payment.totalDeductions),
+        });
+      } else {
+        this.logger.warn(`Email not sent for payment ${paymentId}: missing employee user email`);
+      }
+
       await this.updateSalaryRunStatusIfFinished(payment.salaryRunId);
       this.logger.log(`Payment ${paymentId} SUCCESS | UTR: ${result.utr}`);
     } catch (err) {
@@ -81,8 +100,24 @@ export class PayrollProcessor {
       });
 
       if (isFinal) {
-        const payment = await this.prisma.salaryPayment.findUnique({ where: { id: paymentId } });
-        if (payment?.salaryRunId) await this.updateSalaryRunStatusIfFinished(payment.salaryRunId);
+        const failedPayment = await this.prisma.salaryPayment.findUnique({
+          where: { id: paymentId },
+          include: {
+            employee: { include: { user: true } },
+            salaryRun: true,
+          },
+        });
+
+        if (failedPayment?.employee?.user?.email && failedPayment.salaryRun) {
+          await this.notifications.sendPaymentFailureAlert(failedPayment.employee.user.email, {
+            firstName: failedPayment.employee.firstName,
+            reason: errorMessage,
+            month: failedPayment.salaryRun.month,
+            year: failedPayment.salaryRun.year,
+          });
+        }
+
+        if (failedPayment?.salaryRunId) await this.updateSalaryRunStatusIfFinished(failedPayment.salaryRunId);
       }
       throw err; // Re-throw so Bull handles retry with exponential backoff
     }

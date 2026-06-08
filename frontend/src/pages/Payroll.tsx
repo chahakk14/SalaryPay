@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSalaryRuns, createSalaryRun, approveSalaryRun,
-  executeSalaryRun, createPayrollOrder, verifyPayrollPayment,
+  executeSalaryRun, retryPendingPayments, createPayrollOrder, verifyPayrollPayment,
 } from '../api/payroll';
 import { generatePayslips } from '../api/payslips';
 import { useAuthStore } from '../store/authStore';
 import Badge from '../components/ui/Badge';
 import {
   Plus, Play, CheckCheck, FileText, CreditCard,
-  Info, Loader2, X, AlertCircle, CheckCircle
+  Info, Loader2, X, AlertCircle, CheckCircle, RefreshCw
 } from 'lucide-react';
 import { SalaryRun } from '../types';
 
@@ -188,6 +188,16 @@ export default function Payroll() {
     mutationFn: executeSalaryRun,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['salary-runs'] }),
   });
+  const retryPendingMutation = useMutation({
+    mutationFn: retryPendingPayments,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['salary-runs'] });
+      window.alert(`Retry queued for ${data?.retried ?? '0'} pending payment(s)`);
+    },
+    onError: (err: any) => {
+      window.alert(err?.response?.data?.message || err?.message || 'Retry failed');
+    },
+  });
   const genPayslipsMutation = useMutation({ mutationFn: generatePayslips });
 
   const refreshRuns = () => qc.invalidateQueries({ queryKey: ['salary-runs'] });
@@ -303,6 +313,16 @@ export default function Payroll() {
                           className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-xs hover:bg-indigo-100"
                         >
                           <Play className="w-3 h-3" /> Execute
+                        </button>
+                      )}
+
+                      {run.status === 'PROCESSING' && isRole('SUPER_ADMIN', 'FINANCE_TEAM') && (
+                        <button
+                          onClick={() => retryPendingMutation.mutate(run.id)}
+                          disabled={retryPendingMutation.isPending}
+                          className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded text-xs hover:bg-amber-100 disabled:opacity-60"
+                        >
+                          <RefreshCw className="w-3 h-3" /> Retry Pending
                         </button>
                       )}
 

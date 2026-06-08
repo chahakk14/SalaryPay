@@ -19,4 +19,14 @@ export class AuthController {
   changePassword(@Request() req, @Body() body: { oldPassword: string; newPassword: string }) {
     return this.auth.changePassword(req.user.userId, body.oldPassword, body.newPassword);
   }
+
+  @Post('request-password-reset')
+  requestPasswordReset(@Body() body: { email: string }) {
+    return this.auth.requestPasswordReset(body.email);
+  }
+
+  @Post('reset-password')
+  resetPassword(@Body() body: { email: string; otp: string; newPassword: string }) {
+    return this.auth.resetPassword(body.email, body.otp, body.newPassword);
+  }
 }

@@ -8,6 +8,8 @@ export const approveSalaryRun = (id: string) =>
   api.post(`/payroll/runs/${id}/approve`).then(r => r.data);
 export const executeSalaryRun = (id: string) =>
   api.post(`/payroll/runs/${id}/execute`).then(r => r.data);
+export const retryPendingPayments = (id: string) =>
+  api.post(`/payroll/runs/${id}/retry-pending`).then(r => r.data);
 export const getPaymentHistory = () => api.get('/payroll/history').then(r => r.data);
 export const createPayrollOrder = (id: string) =>
   api.post(`/payroll/runs/${id}/create-order`).then(r => r.data);
